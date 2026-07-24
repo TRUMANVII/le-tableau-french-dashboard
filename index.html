@@ -123,19 +123,43 @@ function parseJSONLoose(text) {
 // ---------------------------------------------------------------------------
 // Speech synthesis (playback) — free, browser-native
 // ---------------------------------------------------------------------------
-function speakFrench(text, rate = 0.88) {
+function speakFrench(text, slow = false) {
   return new Promise((resolve) => {
     try {
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'fr-FR';
-      utter.rate = rate;
       const voices = window.speechSynthesis.getVoices();
       const frVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith('fr'));
-      if (frVoice) utter.voice = frVoice;
-      utter.onend = resolve;
-      utter.onerror = resolve;
-      window.speechSynthesis.speak(utter);
+
+      if (!slow) {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'fr-FR';
+        utter.rate = 0.88;
+        if (frVoice) utter.voice = frVoice;
+        utter.onend = resolve;
+        utter.onerror = resolve;
+        window.speechSynthesis.speak(utter);
+        return;
+      }
+
+      // Slow mode: many browsers (notably iOS Safari's standard-quality voices)
+      // silently ignore utterance.rate, so a lower rate alone isn't reliably
+      // audible. Instead, speak word-by-word with a pause between each —
+      // this is perceptibly slower on every engine and doubles as clearer
+      // pronunciation segmentation for shadowing practice.
+      const words = text.split(/\s+/).filter(Boolean);
+      let i = 0;
+      const speakNext = () => {
+        if (i >= words.length) { resolve(); return; }
+        const utter = new SpeechSynthesisUtterance(words[i]);
+        utter.lang = 'fr-FR';
+        utter.rate = 0.7;
+        if (frVoice) utter.voice = frVoice;
+        const advance = () => { i++; setTimeout(speakNext, 260); };
+        utter.onend = advance;
+        utter.onerror = advance;
+        window.speechSynthesis.speak(utter);
+      };
+      speakNext();
     } catch (e) { resolve(); }
   });
 }
@@ -465,7 +489,7 @@ function HomeView({ profile, vocabBank, sessionHistory, conversationLog, hasAzur
   const showWeekly = profile.weeklyNote && profile.weeklyNoteDate && profile.weeklyNoteDate >= addDays(todayISO(), -2);
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '28px 20px 40px' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: 'max(44px, calc(env(safe-area-inset-top) + 20px)) 20px 40px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 26, letterSpacing: 0.5, textTransform: 'uppercase' }}>
@@ -566,7 +590,7 @@ function HomeView({ profile, vocabBank, sessionHistory, conversationLog, hasAzur
 // ---------------------------------------------------------------------------
 function SettingsView({ draft, setDraft, onBack, onSave }) {
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 20px 40px' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: 'max(36px, calc(env(safe-area-inset-top) + 12px)) 20px 40px' }}>
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.chalkMuted, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0', marginBottom: 10 }}>
         <ArrowLeft size={18} /> Back
       </button>
@@ -631,7 +655,7 @@ function LibraryView({ vocabBank, onBack, onUpdate }) {
   });
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 20px 40px' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: 'max(36px, calc(env(safe-area-inset-top) + 12px)) 20px 40px' }}>
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.chalkMuted, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0', marginBottom: 10 }}>
         <ArrowLeft size={18} /> Back
       </button>
@@ -706,7 +730,7 @@ function ConversationLogView({ conversationLog, onBack, onAdd }) {
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 20px 40px' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: 'max(36px, calc(env(safe-area-inset-top) + 12px)) 20px 40px' }}>
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.chalkMuted, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0', marginBottom: 10 }}>
         <ArrowLeft size={18} /> Back
       </button>
@@ -994,7 +1018,7 @@ function scoreToBox(card, accuracy) {
 
 function SessionShell({ children, onExit, progressLabel, hideBack }) {
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 20px 40px', minHeight: '100vh', boxSizing: 'border-box' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: 'max(36px, calc(env(safe-area-inset-top) + 12px)) 20px 40px', minHeight: '100vh', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         {!hideBack ? (
           <button onClick={onExit} style={{ background: 'none', border: 'none', color: C.chalkMuted, display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}>
@@ -1063,7 +1087,7 @@ function PracticeCard({ french, english, note, hasAzure, azureCfg, onResult, onN
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button
-            onClick={() => speakFrench(french, slow ? 0.55 : 0.88)}
+            onClick={() => speakFrench(french, slow)}
             style={{ flex: 1, background: C.bleuDim, color: C.chalk, border: `1px solid ${C.panelLine}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}
           >
             <Volume2 size={17} /> Listen
@@ -1173,7 +1197,7 @@ function SpeakPrompt({ prompt, hasAzure, azureCfg, onDone }) {
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button
-            onClick={() => speakFrench(prompt.question_fr, slow ? 0.55 : 0.88)}
+            onClick={() => speakFrench(prompt.question_fr, slow)}
             style={{ flex: 1, background: C.bleuDim, color: C.chalk, border: `1px solid ${C.panelLine}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}
           >
             <Volume2 size={17} /> Hear the question
